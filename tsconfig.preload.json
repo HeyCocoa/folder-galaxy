@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "dist/preload",
+    "lib": ["ES2021", "DOM"],
+    "types": ["node", "electron"],
+    "noEmit": false,
+    "sourceMap": true
+  },
+  "include": ["src/preload/**/*.ts", "src/common/**/*.ts"]
+}
+

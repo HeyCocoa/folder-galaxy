@@ -1,0 +1,65 @@
+:root {
+  --bg: #0b0e17;
+  --panel: #141a27;
+  --text: #e7eef7;
+  --muted: #9bb0c7;
+  --accent: #6aa3ff;
+  --danger: #ff6a6a;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 20% 10%, #0f1530, #0b0e17);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Segoe UI Emoji";
+  overflow: hidden; /* 防止窗口尺寸抖动引发滚动条闪烁 */
+}
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid #1e2740;
+}
+.toolbar input[type="text"] {
+  width: 380px;
+  background: #0e1426;
+  border: 1px solid #243155;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.toolbar button, .toolbar select {
+  background: #1b2745;
+  color: var(--text);
+  border: 1px solid #2b3b66;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.toolbar .meta { color: var(--muted); margin-left: auto; font-size: 13px; }
+.content { position: relative; overflow: hidden; }
+.graph-container { position: absolute; inset: 0; }
+svg { display: block; }
+.tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(20, 26, 39, 0.95);
+  border: 1px solid #2b3b66;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12px;
+  z-index: 10;
+  min-width: 220px;
+}
+.legend { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.legend .swatch { width: 10px; height: 10px; border-radius: 999px; display: inline-block; margin-right: 6px; }

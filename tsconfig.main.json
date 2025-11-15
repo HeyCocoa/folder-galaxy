@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "dist/main",
+    "lib": ["ES2021"],
+    "types": ["node", "electron"],
+    "noEmit": false,
+    "sourceMap": true
+  },
+  "include": ["src/main/**/*.ts", "src/common/**/*.ts"]
+}
+

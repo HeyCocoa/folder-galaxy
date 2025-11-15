@@ -1,0 +1,44 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getFileTypeGroup = getFileTypeGroup;
+exports.isHiddenName = isHiddenName;
+const path_1 = __importDefault(require("path"));
+const EXT_MAP = Object.create(null);
+function map(exts, group) {
+    for (const e of exts)
+        EXT_MAP[e] = group;
+}
+map([
+    'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts'
+], 'video');
+map([
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'tif', 'tiff', 'heic', 'heif', 'ico', 'raw', 'cr2', 'nef', 'arw'
+], 'image');
+map([
+    'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'aiff', 'alac', 'opus'
+], 'audio');
+map([
+    'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'md', 'txt', 'rtf', 'odt', 'ods', 'odp', 'epub'
+], 'document');
+map([
+    'js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'json', 'yml', 'yaml', 'xml', 'html', 'css', 'scss', 'less', 'vue', 'svelte', 'py', 'java', 'kt', 'c', 'h', 'cpp', 'hpp', 'cs', 'go', 'rb', 'rs', 'php', 'sql', 'swift', 'r', 'ipynb', 'sh', 'bat', 'ps1', 'toml', 'ini', 'gradle'
+], 'code');
+map([
+    'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'lz', 'lz4', 'zst', 'iso', 'dmg', 'cab'
+], 'archive');
+function getFileTypeGroup(filePath) {
+    const ext = path_1.default.extname(filePath).toLowerCase().replace(/^\./, '');
+    return EXT_MAP[ext] || 'other';
+}
+function isHiddenName(name) {
+    // Basic heuristic: dotfiles and common system files
+    if (!name)
+        return false;
+    if (name.startsWith('.'))
+        return true;
+    const lower = name.toLowerCase();
+    return lower === 'thumbs.db' || lower === 'desktop.ini' || lower === '$recycle.bin';
+}
