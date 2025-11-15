@@ -9,10 +9,12 @@ import type {
   ScanResult,
   FileTypeGroup,
   TypeBreakdownEntry,
+  ScanProgress,
 } from '../../shared/types';
 
 const DEFAULT_MAX_DEPTH = 2;
-const MAX_FILE_THRESHOLD = 10_000; // MVP: bail out for huge trees
+const DEFAULT_CONCURRENCY = 64;
+const SOFT_FILE_LIMIT_DEFAULT = 1_000_000; // soft cap; do not abort
 
 type TB = Partial<Record<FileTypeGroup, TypeBreakdownEntry>>;
 
@@ -56,11 +58,18 @@ async function statSafe(p: string) {
   }
 }
 
-export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
+export async function scanDirectory(
+  options: ScanOptions,
+  ctx?: { onProgress?: (p: ScanProgress) => void; isCancelled?: () => boolean }
+): Promise<ScanResult> {
   const rootPath = path.resolve(options.rootPath);
   const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
   const followSymlinks = options.followSymlinks ?? false;
   const includeHidden = options.includeHidden ?? false;
+  const includeSystem = options.includeSystem ?? false;
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? DEFAULT_CONCURRENCY, 256));
+  const softFileLimit = options.softFileLimit ?? SOFT_FILE_LIMIT_DEFAULT;
+  const scanId = options.scanId || Math.random().toString(36).slice(2);
 
   const rootStat = await statSafe(rootPath);
   if (!rootStat || !rootStat.isDirectory()) {
@@ -69,6 +78,88 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
 
   const visitedRealPaths = new Set<string>();
   const fileCounter = { count: 0 };
+  const dirCounter = { count: 0 };
+  const startedAt = Date.now();
+  const emit = (phase: ScanProgress['phase'], currentPath?: string) => {
+    if (!ctx?.onProgress) return;
+    const now = Date.now();
+    if ((emit as any)._last && now - (emit as any)._last < 120 && phase === 'enumerating') return; // throttle
+    (emit as any)._last = now;
+    ctx.onProgress({
+      scanId,
+      scannedFiles: fileCounter.count,
+      scannedDirs: dirCounter.count,
+      bytes: 0, // optional: could maintain running bytes if desired
+      currentPath,
+      elapsedMs: now - startedAt,
+      phase,
+    });
+  };
+
+  function cancelled() {
+    return ctx?.isCancelled?.() === true;
+  }
+
+  function isWindows() {
+    return process.platform === 'win32';
+  }
+
+  function normalizeCase(p: string) {
+    return isWindows() ? p.toLowerCase() : p;
+  }
+
+  const systemExcludes = (() => {
+    if (!isWindows() || includeSystem) return [] as string[];
+    const root = path.parse(rootPath).root; // e.g., C:\
+    const join = (...s: string[]) => normalizeCase(path.join(root, ...s));
+    return [
+      join('Windows'),
+      join('Program Files'),
+      join('Program Files (x86)'),
+      join('ProgramData'),
+      join('$Recycle.Bin'),
+      join('System Volume Information'),
+      join('Recovery'),
+      join('PerfLogs'),
+    ];
+  })();
+
+  function isExcludedDir(p: string) {
+    if (!systemExcludes.length) return false;
+    const np = normalizeCase(p);
+    if (systemExcludes.some((base) => np === base || np.startsWith(base + path.sep))) return true;
+    // Users/*/AppData
+    const users = normalizeCase(path.join(path.parse(rootPath).root, 'Users'));
+    if (np.startsWith(users + path.sep)) {
+      const segs = np.slice(users.length + 1).split(path.sep);
+      if (segs.length >= 2 && segs[1] === 'AppData') return true;
+    }
+    return false;
+  }
+
+  async function pMap<T, R>(items: T[], limit: number, fn: (item: T, idx: number) => Promise<R>): Promise<R[]> {
+    const ret: R[] = new Array(items.length);
+    let i = 0;
+    let active = 0;
+    return await new Promise<R[]>((resolve, reject) => {
+      const next = () => {
+        if (cancelled()) return reject(new Error('Scan cancelled'));
+        if (i === items.length && active === 0) return resolve(ret);
+        while (active < limit && i < items.length) {
+          const cur = i++;
+          active++;
+          Promise.resolve(fn(items[cur], cur))
+            .then((v) => {
+              ret[cur] = v;
+              active--;
+              next();
+            })
+            .catch(reject);
+        }
+      };
+      next();
+    });
+  }
 
   async function sumAllBelow(dirPath: string): Promise<{ size: number; count: number; tb: TB }> {
     let size = 0;
@@ -83,14 +174,16 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
     } catch {
       return { size, count, tb };
     }
-    for (const e of entries) {
-      if (!includeHidden && isHiddenName(e.name)) continue;
+    emit('enumerating', dirPath);
+    await pMap(entries, concurrency, async (e) => {
+      if (!includeHidden && isHiddenName(e.name)) return;
       const full = path.join(dirPath, e.name);
+      if (e.isDirectory() && isExcludedDir(full)) return;
       if (e.isSymbolicLink()) {
-        if (!followSymlinks) continue;
+        if (!followSymlinks) return;
         const realp = await fs.realpath(full).catch(() => full);
         const st = await statSafe(realp);
-        if (!st) continue;
+        if (!st) return;
         if (st.isDirectory()) {
           const sub = await sumAllBelow(realp);
           size += sub.size;
@@ -103,7 +196,7 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
           fileCounter.count += 1;
           addFileToBreakdown(tb, getFileTypeGroup(full), s);
         }
-        continue;
+        return;
       }
       if (e.isDirectory()) {
         const sub = await sumAllBelow(full);
@@ -119,7 +212,7 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
           addFileToBreakdown(tb, getFileTypeGroup(full), st.size);
         } catch { /* ignore */ }
       }
-    }
+    });
     return { size, count, tb };
   }
 
@@ -143,17 +236,19 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
     }
     visitedRealPaths.add(currentReal);
 
-    const entries = await fs.readdir(currentPath, { withFileTypes: true });
+    dirCounter.count += 1;
+    emit('enumerating', currentPath);
+    const entries = await fs.readdir(currentPath, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
 
-    for (const e of entries) {
-      if (!includeHidden && isHiddenName(e.name)) continue;
+    await pMap(entries, concurrency, async (e) => {
+      if (!includeHidden && isHiddenName(e.name)) return;
       const full = path.join(currentPath, e.name);
       // For symlinks, decide whether to follow
       if (e.isSymbolicLink()) {
-        if (!followSymlinks) continue;
+        if (!followSymlinks) return;
         const real = await fs.realpath(full).catch(() => full);
         const st = await statSafe(real);
-        if (!st) continue;
+        if (!st) return;
         if (st.isDirectory()) {
           if (depth + 1 <= maxDepth) {
             const child = await walk(real, depth + 1);
@@ -172,10 +267,11 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
           node.directFileCount += 1;
           fileCounter.count += 1;
         }
-        continue;
+        return;
       }
 
       if (e.isDirectory()) {
+        if (isExcludedDir(full)) return;
         if (depth + 1 <= maxDepth) {
           const child = await walk(full, depth + 1);
           node.children.push(child);
@@ -194,14 +290,12 @@ export async function scanDirectory(options: ScanOptions): Promise<ScanResult> {
           node.directSize += size;
           node.directFileCount += 1;
           fileCounter.count += 1;
-          if (fileCounter.count > MAX_FILE_THRESHOLD) {
-            throw new Error(`Too many files (> ${MAX_FILE_THRESHOLD}). Please narrow the scope.`);
-          }
+          // Soft limit only for telemetry; do not abort
         } catch {
           // ignore unreadable files
         }
       }
-    }
+    });
 
     return node;
   }

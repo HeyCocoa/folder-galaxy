@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Controls from './components/Controls';
 import ConstellationGraph from './components/ConstellationGraph';
-import type { ScanResult } from '../shared/types';
+import type { ScanResult, ScanProgress } from '../shared/types';
 import { formatBytes, formatNumber } from './utils/format';
 import { GROUP_COLORS } from './utils/colors';
 
@@ -9,19 +9,35 @@ const App: React.FC = () => {
   const [rootPath, setRootPath] = useState('');
   const [depth, setDepth] = useState(2);
   const [includeHidden, setIncludeHidden] = useState(false);
+  const [includeSystem, setIncludeSystem] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [trashSet, setTrashSet] = useState<Set<string>>(new Set());
+  const [scanId, setScanId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ text: string } | null>(null);
 
   const onScan = async () => {
     if (!rootPath) return;
     setScanning(true);
     setError(null);
     setResult(null);
+    setProgress({ text: '准备扫描…' });
     try {
-      const res = await window.api.scanDirectory({ rootPath, maxDepth: depth, includeHidden, followSymlinks: false });
+      const sid = (globalThis.crypto && 'randomUUID' in globalThis.crypto ? (globalThis.crypto as any).randomUUID() : Math.random().toString(36).slice(2)) as string;
+      setScanId(sid);
+      const unsub = window.api.onScanProgress((p: ScanProgress) => {
+        if (p.scanId !== sid) return;
+        if (p.phase === 'done' || p.phase === 'cancelled') {
+          setProgress(p.phase === 'done' ? { text: '扫描完成' } : { text: '已取消' });
+          unsub();
+        } else {
+          const secs = Math.max(1, Math.floor(p.elapsedMs / 1000));
+          setProgress({ text: `扫描中… 文件 ${p.scannedFiles}｜目录 ${p.scannedDirs}｜${secs}s` });
+        }
+      });
+      const res = await window.api.scanDirectory({ rootPath, maxDepth: depth, includeHidden, includeSystem, followSymlinks: false, scanId: sid });
       if (res.ok) {
         setResult(res.result);
         setSelectedId(null);
@@ -32,7 +48,12 @@ const App: React.FC = () => {
       setError(e?.message || String(e));
     } finally {
       setScanning(false);
+      setScanId(null);
     }
+  };
+
+  const onCancel = async () => {
+    if (scanId) await window.api.cancelScan(scanId);
   };
 
   const summary = useMemo(() => {
@@ -49,9 +70,13 @@ const App: React.FC = () => {
         setDepth={setDepth}
         includeHidden={includeHidden}
         setIncludeHidden={setIncludeHidden}
+        includeSystem={includeSystem}
+        setIncludeSystem={setIncludeSystem}
         onScan={onScan}
+        onCancel={onCancel}
         scanning={scanning}
         lastError={error}
+        progress={progress}
       />
       <div className="content">
         {summary && <div style={{ padding: '6px 14px', color: 'var(--muted)', fontSize: 13 }}>{summary}</div>}
