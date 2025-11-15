@@ -10,11 +10,13 @@ import type {
   FileTypeGroup,
   TypeBreakdownEntry,
   ScanProgress,
+  FileStats,
 } from '../../shared/types';
 
 const DEFAULT_MAX_DEPTH = 2;
 const DEFAULT_CONCURRENCY = 64;
 const SOFT_FILE_LIMIT_DEFAULT = 1_000_000; // soft cap; do not abort
+const MAX_FILE_THRESHOLD = 10_000; // hard cap for file-level detail in includeFiles mode
 
 type TB = Partial<Record<FileTypeGroup, TypeBreakdownEntry>>;
 
@@ -216,6 +218,8 @@ export async function scanDirectory(
     return { size, count, tb };
   }
 
+  const collectFiles: FileStats[] = [];
+
   async function walk(currentPath: string, depth: number): Promise<FolderNode> {
     const name = path.basename(currentPath) || currentPath;
     const node: FolderNode = {
@@ -266,6 +270,20 @@ export async function scanDirectory(
           node.directSize += size;
           node.directFileCount += 1;
           fileCounter.count += 1;
+          if (options.includeFiles) {
+            if (collectFiles.length >= MAX_FILE_THRESHOLD) {
+              throw new Error(`Too many files to include in file-level view (> ${MAX_FILE_THRESHOLD}). Please scan without file-level details or narrow your scope.`);
+            }
+            collectFiles.push({
+              id: makeId(full),
+              path: full,
+              name: e.name,
+              parentId: node.id,
+              depth: depth + 1,
+              size,
+              type: group,
+            });
+          }
         }
         return;
       }
@@ -290,6 +308,20 @@ export async function scanDirectory(
           node.directSize += size;
           node.directFileCount += 1;
           fileCounter.count += 1;
+          if (options.includeFiles) {
+            if (collectFiles.length >= MAX_FILE_THRESHOLD) {
+              throw new Error(`Too many files to include in file-level view (> ${MAX_FILE_THRESHOLD}). Please scan without file-level details or narrow your scope.`);
+            }
+            collectFiles.push({
+              id: makeId(full),
+              path: full,
+              name: e.name,
+              parentId: node.id,
+              depth: depth + 1,
+              size,
+              type: group,
+            });
+          }
           // Soft limit only for telemetry; do not abort
         } catch {
           // ignore unreadable files
@@ -340,6 +372,7 @@ export async function scanDirectory(
     folders,
     totalSize: aggRoot.totalSize,
     totalFileCount: aggRoot.fileCount,
+    files: options.includeFiles ? collectFiles : undefined,
   };
   return result;
 }

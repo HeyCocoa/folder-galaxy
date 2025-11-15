@@ -10,6 +10,7 @@ const App: React.FC = () => {
   const [depth, setDepth] = useState(2);
   const [includeHidden, setIncludeHidden] = useState(false);
   const [includeSystem, setIncludeSystem] = useState(false);
+  const [includeFiles, setIncludeFiles] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ const App: React.FC = () => {
           setProgress({ text: `扫描中… 文件 ${p.scannedFiles}｜目录 ${p.scannedDirs}｜${secs}s` });
         }
       });
-      const res = await window.api.scanDirectory({ rootPath, maxDepth: depth, includeHidden, includeSystem, followSymlinks: false, scanId: sid });
+      const res = await window.api.scanDirectory({ rootPath, maxDepth: depth, includeHidden, includeSystem, includeFiles, followSymlinks: false, scanId: sid });
       if (res.ok) {
         setResult(res.result);
         setSelectedId(null);
@@ -72,6 +73,8 @@ const App: React.FC = () => {
         setIncludeHidden={setIncludeHidden}
         includeSystem={includeSystem}
         setIncludeSystem={setIncludeSystem}
+        includeFiles={includeFiles}
+        setIncludeFiles={setIncludeFiles}
         onScan={onScan}
         onCancel={onCancel}
         scanning={scanning}
@@ -89,11 +92,12 @@ const App: React.FC = () => {
             setTrashSet((prev) => new Set(prev.has(id) ? [...prev].filter((x) => x !== id) : [...prev, id]))
           }
           renderDepth={depth >= 2 ? 2 : 1}
+          includeFiles={includeFiles}
         />
         {/* Legend moved here to避免重复渲染 */}
         <div className="legend" style={{ position: 'absolute', bottom: 10, left: 12 }}>
           {Object.entries(GROUP_COLORS).map(([k, v]) => (
-            <span key={k}><span className="swatch" style={{ background: v }} />{k}</span>
+            <span key={k}><span className="swatch" style={{ background: v, borderColor: '#000' }} />{k}</span>
           ))}
         </div>
       </div>

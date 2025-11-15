@@ -10,6 +10,8 @@ interface Props {
   setIncludeHidden: (b: boolean) => void;
   includeSystem: boolean;
   setIncludeSystem: (b: boolean) => void;
+  includeFiles: boolean;
+  setIncludeFiles: (b: boolean) => void;
   onScan: () => void;
   onCancel: () => void;
   scanning: boolean;
@@ -26,6 +28,8 @@ const Controls: React.FC<Props> = ({
   setIncludeHidden,
   includeSystem,
   setIncludeSystem,
+  includeFiles,
+  setIncludeFiles,
   onScan,
   onCancel,
   scanning,
@@ -44,7 +48,6 @@ const Controls: React.FC<Props> = ({
       <select value={depth} onChange={(e) => setDepth(Number(e.target.value))}>
         <option value={1}>1</option>
         <option value={2}>2</option>
-        <option value={3}>3</option>
       </select>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -55,6 +58,11 @@ const Controls: React.FC<Props> = ({
       <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <input type="checkbox" checked={includeSystem} onChange={(e) => setIncludeSystem(e.target.checked)} />
         包含系统目录
+      </label>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input type="checkbox" checked={includeFiles} onChange={(e) => setIncludeFiles(e.target.checked)} />
+        显示文件
       </label>
 
       <button disabled={!rootPath || scanning} onClick={onScan}>{scanning ? '扫描中…' : '开始扫描'}</button>

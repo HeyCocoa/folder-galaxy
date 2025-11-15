@@ -12,6 +12,7 @@ export interface ScanOptions {
   maxDepth?: number; // default 2
   followSymlinks?: boolean; // default false
   includeHidden?: boolean; // default false
+  includeFiles?: boolean; // default false: include per-file leaves in result
   // New options (Plan A)
   includeSystem?: boolean; // default false on Windows (exclude system folders by default)
   concurrency?: number; // default 64
@@ -36,12 +37,23 @@ export interface FolderStats {
   childrenIds: string[];
 }
 
+export interface FileStats {
+  id: string;
+  path: string;
+  name: string;
+  parentId: string; // folder id that directly contains this file
+  depth: number; // parent folder depth + 1
+  size: number;
+  type: FileTypeGroup;
+}
+
 export interface ScanResult {
   rootPath: string;
   generatedAt: string; // ISO string
   folders: FolderStats[];
   totalSize: number;
   totalFileCount: number;
+  files?: FileStats[]; // optional; present only when includeFiles was requested
 }
 
 // Progress event payload sent from main to renderer
