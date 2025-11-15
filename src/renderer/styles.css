@@ -1,36 +1,66 @@
 :root {
-  --bg: #F5F1E6; /* Neo‑Brutalism background */
-  --panel: #F5F1E6;
-  --text: #000000;
-  --muted: #333333;
-  --accent: #000000;
+  /* Warm dark theme for circle packing */
+  --bg-start: #141923;
+  --bg-end: #191F2B;
+  --panel: #1C2330;
+  --text: #EAEFF5;
+  --muted: #A9B3C5;
+  --accent: #F78A4A; /* warm orange accent */
   --danger: #ff3b30;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Segoe UI Emoji"; overflow: hidden; }
+body {
+  margin: 0;
+  background: linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Segoe UI Emoji";
+  overflow: hidden;
+}
 .app {
   display: grid;
   grid-template-rows: auto 1fr;
   height: 100%;
 }
-.toolbar { display: flex; gap: 12px; align-items: center; padding: 10px 14px; background: var(--panel); border-bottom: 2px solid #000; }
+.toolbar { display: flex; gap: 12px; align-items: center; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid rgba(255,255,255,0.08); }
 .toolbar input[type="text"] {
-  width: 380px; background: #fff; border: 2px solid #000; color: var(--text); border-radius: 8px; padding: 8px 10px;
+  width: 380px; background: #111723; border: 1px solid rgba(255,255,255,0.12); color: var(--text); border-radius: 8px; padding: 8px 10px;
 }
-.toolbar button, .toolbar select { background: #fff; color: var(--text); border: 2px solid #000; border-radius: 8px; padding: 8px 12px; cursor: pointer; box-shadow: 4px 4px 0 #00000020; }
+.toolbar button, .toolbar select { background: #111723; color: var(--text); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px 12px; cursor: pointer; box-shadow: none; }
 .toolbar .meta { color: var(--muted); margin-left: auto; font-size: 13px; }
 .content { position: relative; overflow: hidden; }
 .graph-container { position: absolute; inset: 0; }
 svg { display: block; }
-.tooltip { position: fixed; pointer-events: none; background: #fff; border: 2px solid #000; border-radius: 8px; padding: 8px 10px; color: #000; font-size: 12px; z-index: 10; min-width: 220px; box-shadow: none; }
-.legend { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
-.legend .swatch { width: 12px; height: 12px; border-radius: 999px; display: inline-block; margin-right: 6px; border: 2px solid #000; }
 
-/* Brutalist breadcrumbs */
-.breadcrumbs { position: absolute; top: 10px; left: 12px; display: flex; gap: 8px; align-items: center; padding: 6px 10px; color: #000; font-weight: 700; font-size: 13px; z-index: 5; background: transparent; }
-.breadcrumbs .crumb { color: #000; cursor: pointer; text-decoration: underline; text-decoration-thickness: 2px; }
-.breadcrumbs .sep { opacity: 1; }
+/* Warm dark tooltip */
+.tooltip {
+  position: fixed; pointer-events: none; background: #0F1520;
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 8px 10px;
+  color: var(--text); font-size: 12px; z-index: 10; min-width: 220px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+}
+
+.legend { display: none; /* hide legacy legend for new scheme */ }
+.legend .swatch { width: 12px; height: 12px; border-radius: 999px; display: inline-block; margin-right: 6px; border: 1px solid rgba(255,255,255,0.14); }
+
+/* Warm breadcrumbs */
+.breadcrumbs { position: absolute; top: 10px; left: 12px; display: flex; gap: 8px; align-items: center; padding: 6px 10px; color: var(--muted); font-weight: 600; font-size: 13px; z-index: 5; background: transparent; }
+.breadcrumbs .crumb { color: var(--text); cursor: pointer; text-decoration: none; }
+.breadcrumbs .crumb:hover { color: var(--accent); }
+.breadcrumbs .sep { opacity: 0.6; }
+
+/* Info panel (bottom-right) */
+.info-panel {
+  position: absolute; right: 12px; bottom: 12px; min-width: 260px;
+  background: rgba(20,25,35,0.9); border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+}
+.info-panel .title { font-weight: 700; color: var(--text); }
+.info-panel .muted { color: var(--muted); }
+
+/* SVG stroke subtleties for warm dark */
+.node .stroke-ring { stroke: rgba(0,0,0,0.35); }
 
 /* Remove glass/trash styling in brutalist mode */

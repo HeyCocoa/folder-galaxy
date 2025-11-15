@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 import type { ScanResult, FolderStats, FileStats } from '../../shared/types';
 import { useResizeObserver } from '../hooks/useResizeObserver';
 import { useDebounced } from '../hooks/useDebounced';
-import { GROUP_COLORS, getPrimaryType } from '../utils/colors';
+import { GROUP_COLORS } from '../utils/colors';
 import { formatBytes, formatNumber } from '../utils/format';
 
 type Props = {
@@ -125,6 +125,7 @@ function getPath(root: TreeNode, targetId: string): TreeNode[] {
   return ok ? path : [root];
 }
 
+// warm-toned circle packing layout for disk usage
 const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, renderDepth = 1, includeFiles = false }) => {
   const { ref, size } = useResizeObserver<HTMLDivElement>();
   const debSize = useDebounced(size, 120);
@@ -136,15 +137,110 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
 
   const focusTree = useMemo(() => findSubtree(tree, focusId), [tree, focusId]);
 
+  // Determine drill level: 0 = initial, 1 = first drill, 2+ = deeper
+  const level = useMemo(() => {
+    if (!tree) return 0;
+    if (!focusId) return 0;
+    return Math.max(0, getPath(tree, focusId).length - 1);
+  }, [tree, focusId]);
+
+  // Build a shallow (root + first-level only) hierarchy with Top N + Others aggregation
+  type ShallowNode = TreeNode & { __isOthers?: boolean; __hasChildren?: boolean };
+
+  function makeShallowWithTopN(rootIn: TreeNode): TreeNode {
+    const N = level === 0 ? 6 : level === 1 ? 6 : 12;
+    const minR = level === 0 ? 10 : level === 1 ? 8 : 5; // px
+
+    const children = (rootIn.children || []) as ShallowNode[];
+
+    // Sort by size and keep top N
+    const sorted = [...children].sort((a, b) => b.totalSize - a.totalSize);
+    const top = sorted.slice(0, N).map((n) => ({ ...n, __hasChildren: (n.children?.length || 0) > 0 }));
+    const rest = sorted.slice(N);
+
+    // Aggregate small children into "Others" node (size-only placeholder)
+    const othersSize = rest.reduce((acc, n) => acc + n.totalSize, 0);
+    const othersCount = rest.reduce((acc, n) => acc + n.fileCount, 0);
+    const othersSub = rest.reduce((acc, n) => acc + n.subfolderCount, 0);
+    const others: ShallowNode | null = othersSize > 0
+      ? ({
+          ...(rootIn as any),
+          id: rootIn.id + ':others',
+          path: rootIn.path + pathSep('(others)'),
+          name: 'Others',
+          depth: rootIn.depth + 1,
+          totalSize: othersSize,
+          fileCount: othersCount,
+          subfolderCount: othersSub,
+          typeBreakdown: {},
+          childrenIds: [],
+          children: [],
+          __isOthers: true,
+          __hasChildren: false,
+        } as ShallowNode)
+      : null;
+
+    // First pass pack to evaluate radius threshold
+    const shallowRoot: ShallowNode = { ...(rootIn as any), children: others ? [...top, others] : [...top] } as ShallowNode;
+    const firstPacked = d3
+      .pack<ShallowNode>()
+      .size([debSize.width, debSize.height])
+      .padding(6)(
+        d3
+          .hierarchy<ShallowNode>(shallowRoot)
+          .sum((d) => d.totalSize)
+          .sort((a, b) => (b.value || 0) - (a.value || 0))
+      )
+      .descendants();
+
+    // Collect nodes under minR (depth=1 only, not Others) and fold into Others
+    const smallIds = new Set<string>();
+    let othersRef = othersSize > 0 ? others : null;
+    for (const n of firstPacked) {
+      if (n.depth === 1) {
+        const dd = n.data as ShallowNode;
+        if (!dd.__isOthers && n.r < minR) smallIds.add(dd.id);
+      }
+    }
+    if (smallIds.size > 0) {
+      const keep = top.filter((n) => !smallIds.has(n.id));
+      const moved = top.filter((n) => smallIds.has(n.id));
+      const movedSize = moved.reduce((a, b) => a + b.totalSize, 0);
+      const movedFiles = moved.reduce((a, b) => a + b.fileCount, 0);
+      const movedSubs = moved.reduce((a, b) => a + b.subfolderCount, 0);
+      const finalOthers: ShallowNode | null = (othersRef || moved.length > 0)
+        ? ({
+            ...(rootIn as any),
+            id: rootIn.id + ':others',
+            path: rootIn.path + pathSep('(others)'),
+            name: 'Others',
+            depth: rootIn.depth + 1,
+            totalSize: (othersRef?.totalSize || 0) + movedSize,
+            fileCount: (othersRef?.fileCount || 0) + movedFiles,
+            subfolderCount: (othersRef?.subfolderCount || 0) + movedSubs,
+            typeBreakdown: {},
+            childrenIds: [],
+            children: [],
+            __isOthers: true,
+            __hasChildren: false,
+          } as ShallowNode)
+        : null;
+      return { ...(rootIn as any), children: finalOthers ? [...keep, finalOthers] : [...keep] } as TreeNode;
+    }
+    return shallowRoot as TreeNode;
+  }
+
   const nodes = useMemo(() => {
     if (!focusTree) return [] as d3.HierarchyCircularNode<TreeNode>[];
+    // Only keep root + first-level children via Top N + Others
+    const shallow = makeShallowWithTopN(focusTree);
     const root = d3
-      .hierarchy<TreeNode>(focusTree)
+      .hierarchy<TreeNode>(shallow)
       .sum((d) => d.totalSize)
       .sort((a, b) => (b.value || 0) - (a.value || 0));
-    const pack = d3.pack<TreeNode>().size([debSize.width, debSize.height]).padding(4);
+    const pack = d3.pack<TreeNode>().size([debSize.width, debSize.height]).padding(6);
     return pack(root).descendants();
-  }, [focusTree, debSize.width, debSize.height]);
+  }, [focusTree, debSize.width, debSize.height, level]);
 
   useEffect(() => {
     const svg = d3.select(svgRef.current);
@@ -153,16 +249,10 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
     const g = svg.append('g').attr('data-layer', 'graph');
 
     // Filter draw list
-    const drawNodes = nodes.filter((d) => {
-      const isSyntheticFiles = String(d.data.id).endsWith(':files');
-      if (isSyntheticFiles) return false;
-      if (d.depth === 0) return false; // hide root circle
-      const isFile = (d.data as any).isFile === true;
-      if (!isFile) return d.depth <= renderDepth;
-      // files: visible when their parent depth < renderDepth (i.e., within shown folder layer)
-      const parentDepth = d.parent?.depth ?? 0;
-      return parentDepth < renderDepth;
-    });
+    // We only draw first-level circles (depth=1). If none exist (e.g., empty folder),
+    // fall back to drawing the root so the user still sees something.
+    const levelNodes = nodes.filter((d) => d.depth === 1);
+    const drawNodes = levelNodes.length > 0 ? levelNodes : nodes.filter((d) => d.depth === 0);
 
     const nodeSel = g
       .selectAll('g.node')
@@ -174,27 +264,29 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       .style('cursor', 'pointer')
       .on('mouseenter', function (_, d) {
         showTooltip(d);
-        const circle = d3.select(this).select('circle.stroke-ring');
-        const base = Number(circle.attr('data-base-stroke')) || 2;
-        d3.select(this).transition().duration(100).attr('transform', `translate(${d.x},${d.y}) scale(1.05)`);
-        circle.transition().duration(100).attr('stroke-width', base + 1);
+        const circle = d3.select(this).select('circle.fill-disk');
+        const baseFill = circle.attr('data-fill');
+        const c = d3.color(baseFill || '#3A4A62');
+        const lighter = d3.hsl(c as any).brighter(0.8).formatHex();
+        d3.select(this).transition().duration(120).attr('transform', `translate(${d.x},${d.y}) scale(1.04)`);
+        circle.transition().duration(120).attr('fill', lighter);
       })
       .on('mousemove', (event, d) => moveTooltip(event, d))
       .on('mouseleave', function (_, d) {
         hideTooltip();
-        const circle = d3.select(this).select('circle.stroke-ring');
-        const base = Number(circle.attr('data-base-stroke')) || 2;
-        d3.select(this).transition().duration(100).attr('transform', `translate(${d.x},${d.y}) scale(1)`);
-        circle.transition().duration(100).attr('stroke-width', base);
+        const circle = d3.select(this).select('circle.fill-disk');
+        const baseFill = circle.attr('data-fill');
+        d3.select(this).transition().duration(120).attr('transform', `translate(${d.x},${d.y}) scale(1)`);
+        circle.transition().duration(120).attr('fill', baseFill || '#3A4A62');
       })
       .on('click', (_, d) => {
-        setSelectedId(d.data.id);
-        const isFile = (d.data as any).isFile === true;
+        const dd: any = d.data as any;
+        if (!dd.__isOthers) setSelectedId(dd.id);
+        const isFile = dd.isFile === true;
         if (isFile) {
-          // 打开文件而不进入“子树”
-          window.api.openFolder(d.data.path);
-        } else {
-          setFocusId(d.data.id);
+          window.api.openFolder(dd.path);
+        } else if (dd.__hasChildren && d.depth === 1) {
+          setFocusId(dd.id);
         }
       });
 
@@ -202,16 +294,13 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
     nodeSel
       .append('circle')
       .attr('class', 'fill-disk')
-      .attr('r', (d) => {
-        const isFile = (d.data as any).isFile === true;
-        const sw = isFile ? 1 : d.depth === 0 ? 3 : 2;
-        return Math.max(0, d.r - sw);
-      })
+      .attr('r', (d) => Math.max(0, d.r - 1))
       .attr('fill', (d) => {
         const dd: any = d.data as any;
-        if (dd.isFile) return GROUP_COLORS[dd.fileType || 'other'];
-        return GROUP_COLORS[getPrimaryType(dd)];
+        const color = getWarmFill(dd, level);
+        return color;
       })
+      .attr('data-fill', (d) => getWarmFill(d.data as any, level))
       .attr('stroke', 'none')
       .style('shape-rendering', 'geometricPrecision');
 
@@ -225,25 +314,25 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
         return Math.max(0, d.r - inset);
       })
       .attr('fill', 'none')
-      .attr('stroke', '#000')
+      .attr('stroke', 'rgba(0,0,0,0.35)')
       .attr('vector-effect', 'non-scaling-stroke')
       .style('shape-rendering', 'geometricPrecision')
-      .attr('stroke-width', (d) => ((d.data as any).isFile === true ? 1 : d.depth === 0 ? 3 : 2))
-      .attr('data-base-stroke', (d) => ((d.data as any).isFile === true ? 1 : d.depth === 0 ? 3 : 2));
+      .attr('stroke-width', (d) => 1.25)
+      .attr('data-base-stroke', () => 1.25);
 
     // Overlay labels: draw after all nodes so父级文字不会被子圆覆盖
     const labels = svg.append('g').attr('data-layer', 'labels');
     labels
       .selectAll('text')
-      .data(drawNodes.filter((d) => d.depth === 1 && d.r > 18 && (d.data as any).isFile !== true))
+      .data(drawNodes.filter((d) => d.r > 18 && (d.data as any).isFile !== true))
       .enter()
       .append('text')
       .attr('x', (d) => d.x)
       .attr('y', (d) => d.y)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('fill', '#000')
-      .style('font-weight', 700)
+      .attr('fill', '#EAEFF5')
+      .style('font-weight', 600)
       .style('font-size', (d) => Math.max(10, Math.min(18, d.r / 4.2)) + 'px')
       .style('pointer-events', 'none')
       .text((d) => d.data.name);
@@ -251,7 +340,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
     function showTooltip(d: d3.HierarchyCircularNode<TreeNode>) {
       const tip = tooltipRef.current!;
       tip.style.display = 'block';
-      tip.innerHTML = renderTooltipHtml(d.data);
+      tip.innerHTML = renderTooltipHtml(d.data, focusTree?.totalSize || 0);
     }
     function moveTooltip(event: any) {
       const tip = tooltipRef.current!;
@@ -262,7 +351,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       const tip = tooltipRef.current!;
       tip.style.display = 'none';
     }
-  }, [nodes, renderDepth]);
+  }, [nodes, renderDepth, level, focusTree?.totalSize]);
 
   if (!data) return <div ref={ref} className="graph-container" />;
 
@@ -286,32 +375,53 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
   );
 };
 
-function renderTooltipHtml(d: any) {
+function renderTooltipHtml(d: any, rootTotal: number) {
+  const pct = rootTotal > 0 ? ((d.totalSize / rootTotal) * 100).toFixed(1) + '%' : '—';
   const isFile = d?.isFile === true || (!d.childrenIds && d.fileCount === 1 && d.subfolderCount === 0 && d.name && !d.name.includes('(files)'));
   if (isFile) {
     return `
-      <div style="font-weight:700;letter-spacing:.2px;color:#000">${d.name}</div>
-      <div>大小：${formatBytes(d.totalSize)}</div>
-      <div style=\"margin-top:6px;color:#333\">路径：</div>
-      <div style=\"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px\">${d.path}</div>
+      <div style="font-weight:700;letter-spacing:.2px;color:#EAEFF5">${d.name}</div>
+      <div>大小：${formatBytes(d.totalSize)}（${pct}）</div>
+      <div class=\"muted\" style=\"margin-top:6px;color:#A9B3C5\">路径：</div>
+      <div style=\"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px;color:#EAEFF5\">${d.path}</div>
     `;
   }
-  const primary = getPrimaryType(d);
-  const breakdown = Object.entries(d.typeBreakdown)
-    .sort((a: any, b: any) => b[1].size - a[1].size)
-    .slice(0, 3)
-    .map(([k, v]: any) => `${k}: ${formatBytes(v.size)} (${formatNumber(v.count)})`)
-    .join('<br/>');
   return `
-    <div style="font-weight:700;letter-spacing:.2px;color:#000">${d.name}</div>
-    <div>大小：${formatBytes(d.totalSize)}</div>
+    <div style="font-weight:700;letter-spacing:.2px;color:#EAEFF5">${d.name}</div>
+    <div>大小：${formatBytes(d.totalSize)}（${pct}）</div>
     <div>文件：${formatNumber(d.fileCount)} | 子文件夹：${d.subfolderCount}</div>
-    <div>主类型：${primary}</div>
-    <div style=\"margin-top:6px;color:#333\">Top 类型：</div>
-    <div>${breakdown || '—'}</div>
-    <div style=\"margin-top:6px;color:#333\">路径：</div>
-    <div style=\"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px\">${d.path}</div>
+    <div class=\"muted\" style=\"margin-top:6px;color:#A9B3C5\">路径：</div>
+    <div style=\"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px;color:#EAEFF5\">${d.path}</div>
   `;
+}
+
+// Palette helpers
+const BG_BLUES = ['#283549', '#32435A', '#3A4A62'];
+const OTHERS_FILL = '#253245';
+const ACCENT_USERS = '#F78A4A';
+const ACCENT_WINDOWS = '#EFC657';
+const ACCENT_PROGRAMS = '#20909C';
+
+function getWarmFill(d: any, level: number): string {
+  if (d.__isOthers) return OTHERS_FILL;
+  // top-level highlights for common Windows roots
+  const name = String(d.name || '').toLowerCase();
+  if (level === 0) {
+    if (name === 'users') return ACCENT_USERS;
+    if (name === 'windows') return ACCENT_WINDOWS;
+    if (name.startsWith('program files')) return ACCENT_PROGRAMS;
+  }
+  // files keep their type color for legibility if shown
+  if (d.isFile && d.fileType) return GROUP_COLORS[d.fileType] || BG_BLUES[2];
+  // default bluish-gray fill, pick by hash for slight variation
+  const idx = Math.abs(hashCode(d.id || d.name || 'x')) % BG_BLUES.length;
+  return BG_BLUES[idx];
+}
+
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+  return h | 0;
 }
 
 export default ConstellationGraph;

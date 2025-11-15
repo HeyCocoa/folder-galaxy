@@ -3,7 +3,6 @@ import Controls from './components/Controls';
 import ConstellationGraph from './components/ConstellationGraph';
 import type { ScanResult, ScanProgress } from '../shared/types';
 import { formatBytes, formatNumber } from './utils/format';
-import { GROUP_COLORS } from './utils/colors';
 
 const App: React.FC = () => {
   const [rootPath, setRootPath] = useState('');
@@ -94,15 +93,34 @@ const App: React.FC = () => {
           renderDepth={depth >= 2 ? 2 : 1}
           includeFiles={includeFiles}
         />
-        {/* Legend moved here to避免重复渲染 */}
-        <div className="legend" style={{ position: 'absolute', bottom: 10, left: 12 }}>
-          {Object.entries(GROUP_COLORS).map(([k, v]) => (
-            <span key={k}><span className="swatch" style={{ background: v, borderColor: '#000' }} />{k}</span>
-          ))}
-        </div>
+        {/* compact info panel */}
+        {result && selectedId && (
+          <InfoPanel root={result} selectedId={selectedId} />
+        )}
       </div>
     </div>
   );
 };
 
 export default App;
+
+// ——————————————————————————————————————
+// Info panel (bottom-right) showing path/size/counts
+const InfoPanel: React.FC<{ root: ScanResult; selectedId: string }> = ({ root, selectedId }) => {
+  const folder = root.folders.find((f) => f.id === selectedId);
+  const file = root.files?.find((fi) => fi.id === selectedId);
+  const title = folder?.name || file?.name || 'Selected';
+  const fullPath = folder?.path || file?.path || '';
+  const size = folder ? folder.totalSize : file ? (file as any).size ?? 0 : 0;
+  const folders = folder ? folder.subfolderCount : 0;
+  const files = folder ? folder.fileCount : (file ? 1 : 0);
+  return (
+    <div className="info-panel">
+      <div className="title">{title}</div>
+      <div>大小：{formatBytes(size)}</div>
+      <div>子项：{folders} folders, {files} files</div>
+      <div className="muted" style={{ marginTop: 6 }}>路径：</div>
+      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 420 }}>{fullPath}</div>
+    </div>
+  );
+};
