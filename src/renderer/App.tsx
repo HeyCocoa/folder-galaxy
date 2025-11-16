@@ -4,8 +4,6 @@ import ConstellationGraph from './components/ConstellationGraph';
 import type { ScanResult, ScanProgress } from '../shared/types';
 import { formatBytes, formatNumber } from './utils/format';
 
-const MAX_SCAN_DEPTH = 128;
-
 const App: React.FC = () => {
   const [rootPath, setRootPath] = useState('');
   const [includeHidden, setIncludeHidden] = useState(true);
@@ -42,7 +40,6 @@ const App: React.FC = () => {
       });
       const res = await window.api.scanDirectory({
         rootPath,
-        maxDepth: MAX_SCAN_DEPTH,
         includeHidden,
         includeSystem,
         includeFiles: true,

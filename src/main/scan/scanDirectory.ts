@@ -13,10 +13,9 @@ import type {
   FileStats,
 } from '../../shared/types';
 
-const DEFAULT_MAX_DEPTH = 2;
 const DEFAULT_CONCURRENCY = 64;
 const SOFT_FILE_LIMIT_DEFAULT = 1_000_000; // soft cap; do not abort
-const MAX_FILE_THRESHOLD = 10_000; // hard cap for file-level detail in includeFiles mode
+const MAX_FILE_THRESHOLD = 50_000; // hard cap for file-level detail in includeFiles mode
 
 type TB = Partial<Record<FileTypeGroup, TypeBreakdownEntry>>;
 
@@ -65,7 +64,7 @@ export async function scanDirectory(
   ctx?: { onProgress?: (p: ScanProgress) => void; isCancelled?: () => boolean }
 ): Promise<ScanResult> {
   const rootPath = path.resolve(options.rootPath);
-  const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
+  const maxDepth = options.maxDepth && options.maxDepth > 0 ? options.maxDepth : Number.POSITIVE_INFINITY;
   const followSymlinks = options.followSymlinks ?? false;
   const includeHidden = options.includeHidden ?? false;
   const includeSystem = options.includeSystem ?? false;

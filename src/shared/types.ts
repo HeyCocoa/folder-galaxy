@@ -9,7 +9,7 @@ export type FileTypeGroup =
 
 export interface ScanOptions {
   rootPath: string;
-  maxDepth?: number; // default 2
+  maxDepth?: number; // 可选；<=0 或未设置表示不限制深度
   followSymlinks?: boolean; // default false
   includeHidden?: boolean; // default false
   includeFiles?: boolean; // default false: include per-file leaves in result
