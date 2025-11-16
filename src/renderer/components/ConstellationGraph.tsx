@@ -12,7 +12,6 @@ type Props = {
   setSelectedId: (id: string | null) => void;
   trashSet: Set<string>; // ignored in brutalist mode
   toggleTrash: (id: string) => void; // ignored in brutalist mode
-  renderDepth?: number; // brutalist mode renders full subtree
   includeFiles?: boolean;
 };
 
@@ -126,11 +125,15 @@ function getPath(root: TreeNode, targetId: string): TreeNode[] {
 }
 
 // warm-toned circle packing layout for disk usage
-const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, renderDepth = 1, includeFiles = false }) => {
+const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, includeFiles = false }) => {
   const { ref, size } = useResizeObserver<HTMLDivElement>();
   const debSize = useDebounced(size, 120);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
+  const [showZoomHint, setShowZoomHint] = useState(false);
+  const zoomHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tree = useMemo(() => toTree(data, includeFiles), [data, includeFiles]);
   const [focusId, setFocusId] = useState<string | null>(null);
   useEffect(() => setFocusId(null), [tree?.id]);
@@ -144,115 +147,48 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
     return Math.max(0, getPath(tree, focusId).length - 1);
   }, [tree, focusId]);
 
-  // Build a shallow (root + first-level only) hierarchy with Top N + Others aggregation
-  type ShallowNode = TreeNode & { __isOthers?: boolean; __hasChildren?: boolean };
-
-  function makeShallowWithTopN(rootIn: TreeNode): TreeNode {
-    const N = level === 0 ? 6 : level === 1 ? 6 : 12;
-    const minR = level === 0 ? 10 : level === 1 ? 8 : 5; // px
-
-    const children = (rootIn.children || []) as ShallowNode[];
-
-    // Sort by size and keep top N
-    const sorted = [...children].sort((a, b) => b.totalSize - a.totalSize);
-    const top = sorted.slice(0, N).map((n) => ({ ...n, __hasChildren: (n.children?.length || 0) > 0 }));
-    const rest = sorted.slice(N);
-
-    // Aggregate small children into "Others" node (size-only placeholder)
-    const othersSize = rest.reduce((acc, n) => acc + n.totalSize, 0);
-    const othersCount = rest.reduce((acc, n) => acc + n.fileCount, 0);
-    const othersSub = rest.reduce((acc, n) => acc + n.subfolderCount, 0);
-    const others: ShallowNode | null = othersSize > 0
-      ? ({
-          ...(rootIn as any),
-          id: rootIn.id + ':others',
-          path: rootIn.path + pathSep('(others)'),
-          name: 'Others',
-          depth: rootIn.depth + 1,
-          totalSize: othersSize,
-          fileCount: othersCount,
-          subfolderCount: othersSub,
-          typeBreakdown: {},
-          childrenIds: [],
-          children: [],
-          __isOthers: true,
-          __hasChildren: false,
-        } as ShallowNode)
-      : null;
-
-    // First pass pack to evaluate radius threshold
-    const shallowRoot: ShallowNode = { ...(rootIn as any), children: others ? [...top, others] : [...top] } as ShallowNode;
-    const firstPacked = d3
-      .pack<ShallowNode>()
-      .size([debSize.width, debSize.height])
-      .padding(6)(
-        d3
-          .hierarchy<ShallowNode>(shallowRoot)
-          .sum((d) => d.totalSize)
-          .sort((a, b) => (b.value || 0) - (a.value || 0))
-      )
-      .descendants();
-
-    // Collect nodes under minR (depth=1 only, not Others) and fold into Others
-    const smallIds = new Set<string>();
-    let othersRef = othersSize > 0 ? others : null;
-    for (const n of firstPacked) {
-      if (n.depth === 1) {
-        const dd = n.data as ShallowNode;
-        if (!dd.__isOthers && n.r < minR) smallIds.add(dd.id);
-      }
-    }
-    if (smallIds.size > 0) {
-      const keep = top.filter((n) => !smallIds.has(n.id));
-      const moved = top.filter((n) => smallIds.has(n.id));
-      const movedSize = moved.reduce((a, b) => a + b.totalSize, 0);
-      const movedFiles = moved.reduce((a, b) => a + b.fileCount, 0);
-      const movedSubs = moved.reduce((a, b) => a + b.subfolderCount, 0);
-      const finalOthers: ShallowNode | null = (othersRef || moved.length > 0)
-        ? ({
-            ...(rootIn as any),
-            id: rootIn.id + ':others',
-            path: rootIn.path + pathSep('(others)'),
-            name: 'Others',
-            depth: rootIn.depth + 1,
-            totalSize: (othersRef?.totalSize || 0) + movedSize,
-            fileCount: (othersRef?.fileCount || 0) + movedFiles,
-            subfolderCount: (othersRef?.subfolderCount || 0) + movedSubs,
-            typeBreakdown: {},
-            childrenIds: [],
-            children: [],
-            __isOthers: true,
-            __hasChildren: false,
-          } as ShallowNode)
-        : null;
-      return { ...(rootIn as any), children: finalOthers ? [...keep, finalOthers] : [...keep] } as TreeNode;
-    }
-    return shallowRoot as TreeNode;
-  }
-
   const nodes = useMemo(() => {
     if (!focusTree) return [] as d3.HierarchyCircularNode<TreeNode>[];
-    // Only keep root + first-level children via Top N + Others
-    const shallow = makeShallowWithTopN(focusTree);
     const root = d3
-      .hierarchy<TreeNode>(shallow)
+      .hierarchy<TreeNode>(focusTree)
       .sum((d) => d.totalSize)
       .sort((a, b) => (b.value || 0) - (a.value || 0));
-    const pack = d3.pack<TreeNode>().size([debSize.width, debSize.height]).padding(6);
+    const pack = d3.pack<TreeNode>().size([debSize.width, debSize.height]).padding(18);
     return pack(root).descendants();
-  }, [focusTree, debSize.width, debSize.height, level]);
+  }, [focusTree, debSize.width, debSize.height]);
 
   useEffect(() => {
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
     if (!nodes.length) return;
-    const g = svg.append('g').attr('data-layer', 'graph');
+    const container = svg.append('g').attr('data-layer', 'graph-root');
+    const g = container.append('g').attr('data-layer', 'graph');
 
-    // Filter draw list
-    // We only draw first-level circles (depth=1). If none exist (e.g., empty folder),
-    // fall back to drawing the root so the user still sees something.
     const levelNodes = nodes.filter((d) => d.depth === 1);
     const drawNodes = levelNodes.length > 0 ? levelNodes : nodes.filter((d) => d.depth === 0);
+
+    const rootTotalSize = tree?.totalSize || focusTree?.totalSize || 0;
+    const focusTotalSize = focusTree?.totalSize || rootTotalSize;
+    const ratio = rootTotalSize > 0 ? focusTotalSize / rootTotalSize : 1;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    const weight = Math.sqrt(clamped);
+    const minScale = 0.25;
+    const radiusScale = minScale + (1 - minScale) * weight;
+
+    const minZoom = 0.2;
+    const maxZoom = 8;
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([minZoom, maxZoom])
+      .on('zoom', (event: any) => {
+        container.attr('transform', event.transform);
+        const k = event.transform?.k ?? 1;
+        const clampedK = Math.max(minZoom, Math.min(maxZoom, k));
+        setZoomScale(clampedK);
+      });
+    zoomBehaviorRef.current = zoom;
+    svg.call(zoom as any);
+    svg.call(zoom.transform as any, d3.zoomIdentity);
 
     const nodeSel = g
       .selectAll('g.node')
@@ -261,7 +197,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       .append('g')
       .attr('class', 'node')
       .attr('transform', (d) => `translate(${d.x},${d.y})`)
-      .style('cursor', 'pointer')
+      .style('cursor', (d) => ((d.data as any).isFile === true ? 'default' : 'pointer'))
       .on('mouseenter', function (_, d) {
         showTooltip(d);
         const circle = d3.select(this).select('circle.fill-disk');
@@ -279,22 +215,22 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
         d3.select(this).transition().duration(120).attr('transform', `translate(${d.x},${d.y}) scale(1)`);
         circle.transition().duration(120).attr('fill', baseFill || '#4D5664');
       })
-      .on('click', (_, d) => {
-        const dd: any = d.data as any;
-        if (!dd.__isOthers) setSelectedId(dd.id);
-        const isFile = dd.isFile === true;
-        if (isFile) {
-          window.api.openFolder(dd.path);
-        } else if (dd.__hasChildren && d.depth === 1) {
-          setFocusId(dd.id);
+      .on('click', (event: any, d) => {
+        if (event?.detail && event.detail > 1) {
+          return;
         }
+        const dd: any = d.data as any;
+        const isFile = dd.isFile === true;
+        if (isFile) return;
+        setSelectedId(dd.id);
+        setFocusId(dd.id);
       });
 
     // Fill disk: shrink by stroke width so ring不会侵入内侧
     nodeSel
       .append('circle')
       .attr('class', 'fill-disk')
-      .attr('r', (d) => Math.max(0, d.r - 1))
+      .attr('r', (d) => Math.max(0, d.r * radiusScale - 1))
       .attr('fill', (d) => {
         const dd: any = d.data as any;
         const color = getWarmFill(dd, level);
@@ -311,7 +247,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       .attr('r', (d) => {
         const isFile = (d.data as any).isFile === true;
         const inset = isFile ? 0.5 : d.depth === 0 ? 1.5 : 1;
-        return Math.max(0, d.r - inset);
+        return Math.max(0, d.r * radiusScale - inset);
       })
       .attr('fill', 'none')
       .attr('stroke', 'rgba(0,0,0,0.35)')
@@ -321,10 +257,10 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       .attr('data-base-stroke', () => 1.25);
 
     // Overlay labels: draw after all nodes so父级文字不会被子圆覆盖
-    const labels = svg.append('g').attr('data-layer', 'labels');
+    const labels = container.append('g').attr('data-layer', 'labels');
     labels
       .selectAll('text')
-      .data(drawNodes.filter((d) => d.r > 18 && (d.data as any).isFile !== true))
+      .data(drawNodes.filter((d) => d.r * radiusScale > 18))
       .enter()
       .append('text')
       .attr('x', (d) => d.x)
@@ -333,7 +269,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       .attr('dominant-baseline', 'middle')
       .attr('fill', '#EAEFF5')
       .style('font-weight', 600)
-      .style('font-size', (d) => Math.max(10, Math.min(18, d.r / 4.2)) + 'px')
+      .style('font-size', (d) => Math.max(10, Math.min(18, (d.r * radiusScale) / 4.2)) + 'px')
       .style('pointer-events', 'none')
       .text((d) => d.data.name);
 
@@ -351,13 +287,55 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
       const tip = tooltipRef.current!;
       tip.style.display = 'none';
     }
-  }, [nodes, renderDepth, level, focusTree?.totalSize]);
+  }, [nodes, level, focusTree?.totalSize]);
 
   if (!data) return <div ref={ref} className="graph-container" />;
+
+  const handleZoomSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    const value = Number(e.target.value);
+    if (!Number.isFinite(value)) return;
+    const minZoom = 0.2;
+    const maxZoom = 8;
+    const targetScale = Math.max(minZoom, Math.min(maxZoom, value / 100));
+    const svgSel = d3.select(svgRef.current);
+    svgSel
+      .transition()
+      .duration(120)
+      .call(zoomBehaviorRef.current.scaleTo as any, targetScale);
+  };
+
+  const handleZoomSliderPointerDown = () => {
+    if (zoomHintTimeoutRef.current) {
+      clearTimeout(zoomHintTimeoutRef.current);
+    }
+    setShowZoomHint(true);
+    zoomHintTimeoutRef.current = setTimeout(() => {
+      setShowZoomHint(false);
+    }, 2600);
+  };
 
   return (
     <div ref={ref} className="graph-container">
       <svg ref={svgRef} width={debSize.width} height={debSize.height} />
+      <div className="zoom-bar">
+        {showZoomHint && (
+          <span className="zoom-hint-line">滚轮缩放 · 双击放大 · 拖拽平移</span>
+        )}
+        <div className="zoom-bar-inner">
+          <span className="zoom-bar-label">{Math.round(zoomScale * 100)}%</span>
+          <input
+            className="zoom-bar-range"
+            type="range"
+            min={20}
+            max={800}
+            value={Math.round(zoomScale * 100)}
+            onChange={handleZoomSliderChange}
+            onMouseDown={handleZoomSliderPointerDown}
+            onTouchStart={handleZoomSliderPointerDown}
+          />
+        </div>
+      </div>
       <div ref={tooltipRef} className="tooltip" style={{ display: 'none' }} />
       {tree && (
         <div className="breadcrumbs">

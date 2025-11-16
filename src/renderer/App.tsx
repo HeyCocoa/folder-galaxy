@@ -4,9 +4,10 @@ import ConstellationGraph from './components/ConstellationGraph';
 import type { ScanResult, ScanProgress } from '../shared/types';
 import { formatBytes, formatNumber } from './utils/format';
 
+const MAX_SCAN_DEPTH = 128;
+
 const App: React.FC = () => {
   const [rootPath, setRootPath] = useState('');
-  const [depth, setDepth] = useState(2);
   const [includeHidden, setIncludeHidden] = useState(true);
   const [includeSystem, setIncludeSystem] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -39,7 +40,15 @@ const App: React.FC = () => {
           setProgressText(`扫描中… 文件 ${p.scannedFiles}｜目录 ${p.scannedDirs}｜${secs}s`);
         }
       });
-      const res = await window.api.scanDirectory({ rootPath, maxDepth: depth, includeHidden, includeSystem, includeFiles: true, followSymlinks: false, scanId: sid });
+      const res = await window.api.scanDirectory({
+        rootPath,
+        maxDepth: MAX_SCAN_DEPTH,
+        includeHidden,
+        includeSystem,
+        includeFiles: true,
+        followSymlinks: false,
+        scanId: sid,
+      });
       if (res.ok) {
         setResult(res.result);
         setSelectedId(null);
@@ -68,8 +77,6 @@ const App: React.FC = () => {
       <Controls
         rootPath={rootPath}
         setRootPath={setRootPath}
-        depth={depth}
-        setDepth={setDepth}
         includeHidden={includeHidden}
         setIncludeHidden={setIncludeHidden}
         includeSystem={includeSystem}
@@ -90,7 +97,6 @@ const App: React.FC = () => {
           toggleTrash={(id) =>
             setTrashSet((prev) => new Set(prev.has(id) ? [...prev].filter((x) => x !== id) : [...prev, id]))
           }
-          renderDepth={depth >= 2 ? 2 : 1}
           includeFiles
         />
         {scanning && (

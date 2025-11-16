@@ -4,8 +4,6 @@ import type { ScanOptions } from '../../shared/types';
 interface Props {
   rootPath: string;
   setRootPath: (p: string) => void;
-  depth: number;
-  setDepth: (d: number) => void;
   includeHidden: boolean;
   setIncludeHidden: (b: boolean) => void;
   includeSystem: boolean;
@@ -20,8 +18,6 @@ interface Props {
 const Controls: React.FC<Props> = ({
   rootPath,
   setRootPath,
-  depth,
-  setDepth,
   includeHidden,
   setIncludeHidden,
   includeSystem,
@@ -33,11 +29,6 @@ const Controls: React.FC<Props> = ({
   progressText,
 }) => {
   const [open, setOpen] = React.useState(false);
-  const [depthOpen, setDepthOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!open) setDepthOpen(false);
-  }, [open]);
   return (
     <div className="toolbar">
       <button
@@ -67,42 +58,10 @@ const Controls: React.FC<Props> = ({
             />
           </div>
           <div className="toolbar-panel-section">
-            <span className="toolbar-label">深度</span>
-            <div className="depth-select-wrapper">
-              <button
-                type="button"
-                className="depth-select"
-                onClick={() => setDepthOpen((v) => !v)}
-              >
-                <span>{depth}</span>
-                <span className="depth-select-arrow">▾</span>
-              </button>
-              {depthOpen && (
-                <div className="depth-select-menu">
-                  {[1, 2].map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      className={`depth-select-option${
-                        depth === v ? ' depth-select-option--active' : ''
-                      }`}
-                      onClick={() => {
-                        setDepth(v);
-                        setDepthOpen(false);
-                      }}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <button
               type="button"
               className={`toggle-chip${includeHidden ? ' toggle-chip--active' : ''}`}
               onClick={() => {
-                setDepthOpen(false);
                 setIncludeHidden(!includeHidden);
               }}
             >
@@ -113,7 +72,6 @@ const Controls: React.FC<Props> = ({
               type="button"
               className={`toggle-chip${includeSystem ? ' toggle-chip--active' : ''}`}
               onClick={() => {
-                setDepthOpen(false);
                 setIncludeSystem(!includeSystem);
               }}
             >

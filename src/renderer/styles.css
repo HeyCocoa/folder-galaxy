@@ -229,7 +229,7 @@ svg { display: block; }
 }
 .breadcrumbs .crumb { color: #F9FAFB; cursor: pointer; text-decoration: none; }
 .breadcrumbs .crumb:hover { color: var(--accent); }
-.breadcrumbs .sep { opacity: 0.6; }
+.breadcrumbs .sep { color: #FFFFFF; opacity: 1; }
 
 /* Info panel (bottom-right) */
 .info-panel {
@@ -243,6 +243,45 @@ svg { display: block; }
 
 /* SVG stroke subtleties for warm dark */
 .node .stroke-ring { stroke: rgba(0,0,0,0.35); }
+
+/* Bottom-center zoom bar */
+.zoom-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(17,24,39,0.78);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #E5E7EB;
+  font-size: 11px;
+}
+.zoom-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zoom-bar-label {
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-bar-range {
+  width: 140px;
+}
+.zoom-bar-range::-webkit-slider-thumb {
+  cursor: pointer;
+}
+.zoom-hint-line {
+  color: #D1D5DB;
+  white-space: nowrap;
+}
 
 /* Remove glass/trash styling in brutalist mode */
 
