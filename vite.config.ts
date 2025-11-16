@@ -5,18 +5,19 @@ import path from 'path';
 export default defineConfig({
   root: path.resolve(__dirname, 'src/renderer'),
   plugins: [react()],
+  base: './',
   server: {
     port: 5176,
-    strictPort: true
+    strictPort: true,
   },
   build: {
     outDir: path.resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
-    sourcemap: true
+    sourcemap: true,
   },
   resolve: {
     alias: {
-      '@shared': path.resolve(__dirname, 'src/shared')
-    }
-  }
+      '@shared': path.resolve(__dirname, 'src/shared'),
+    },
+  },
 });

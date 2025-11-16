@@ -46,9 +46,19 @@
     "directories": {
       "buildResources": "build"
     },
+    "icon": "build/icon.ico",
+    "linux": {
+      "target": "dir"
+    },
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     }
   }
 }
