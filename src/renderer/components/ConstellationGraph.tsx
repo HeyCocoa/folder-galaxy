@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import type { ScanResult, FolderStats, FileStats } from '../../shared/types';
+import type { ScanResult, FolderStats, FileStats, FileTypeGroup } from '../../shared/types';
 import { useResizeObserver } from '../hooks/useResizeObserver';
 import { useDebounced } from '../hooks/useDebounced';
 import { GROUP_COLORS } from '../utils/colors';
@@ -134,6 +134,13 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
   const [zoomScale, setZoomScale] = useState(1);
   const [showZoomHint, setShowZoomHint] = useState(false);
   const zoomHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    path: string;
+    isFile: boolean;
+    name: string;
+  } | null>(null);
   const tree = useMemo(() => toTree(data, includeFiles), [data, includeFiles]);
   const [focusId, setFocusId] = useState<string | null>(null);
   useEffect(() => setFocusId(null), [tree?.id]);
@@ -207,7 +214,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
         d3.select(this).transition().duration(120).attr('transform', `translate(${d.x},${d.y}) scale(1.04)`);
         circle.transition().duration(120).attr('fill', lighter);
       })
-      .on('mousemove', (event, d) => moveTooltip(event, d))
+      .on('mousemove', (event) => moveTooltip(event))
       .on('mouseleave', function (_, d) {
         hideTooltip();
         const circle = d3.select(this).select('circle.fill-disk');
@@ -224,6 +231,28 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
         if (isFile) return;
         setSelectedId(dd.id);
         setFocusId(dd.id);
+      })
+      .on('contextmenu', (event: any, d) => {
+        event.preventDefault();
+        const dd: any = d.data as any;
+        const path = dd.path as string | undefined;
+        if (!path) return;
+        const isFile = dd.isFile === true;
+        const isSynthetic = typeof dd.id === 'string' && dd.id.endsWith(':files');
+        if (isSynthetic) return;
+        const name = String(dd.name || '');
+        const margin = 8;
+        const menuWidth = 240;
+        const menuHeight = 90;
+        let x = event.clientX as number;
+        let y = event.clientY as number;
+        if (typeof window !== 'undefined') {
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          if (x + menuWidth > vw - margin) x = Math.max(margin, vw - margin - menuWidth);
+          if (y + menuHeight > vh - margin) y = Math.max(margin, vh - margin - menuHeight);
+        }
+        setContextMenu({ x, y, path, isFile, name });
       });
 
     // Fill disk: shrink by stroke width so ring不会侵入内侧
@@ -291,6 +320,24 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
 
   if (!data) return <div ref={ref} className="graph-container" />;
 
+  const handleOpenInDefaultApp = async () => {
+    if (!contextMenu) return;
+    try {
+      await window.api.openPath(contextMenu.path);
+    } finally {
+      setContextMenu(null);
+    }
+  };
+
+  const handleRevealInFileManager = async () => {
+    if (!contextMenu) return;
+    try {
+      await window.api.openFolder(contextMenu.path);
+    } finally {
+      setContextMenu(null);
+    }
+  };
+
   const handleZoomSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
     const value = Number(e.target.value);
@@ -316,7 +363,13 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
   };
 
   return (
-    <div ref={ref} className="graph-container">
+    <div
+      ref={ref}
+      className="graph-container"
+      onClick={() => {
+        if (contextMenu) setContextMenu(null);
+      }}
+    >
       <svg ref={svgRef} width={debSize.width} height={debSize.height} />
       <div className="zoom-bar">
         {showZoomHint && (
@@ -347,6 +400,30 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
               {i < arr.length - 1 && <span className="sep">›</span>}
             </React.Fragment>
           ))}
+        </div>
+      )}
+      {contextMenu && (
+        <div
+          className="node-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="node-context-menu-title">{contextMenu.name}</div>
+          <button
+            type="button"
+            className="node-context-menu-item"
+            onClick={handleRevealInFileManager}
+          >
+            在文件管理器中打开
+          </button>
+          <button
+            type="button"
+            className="node-context-menu-item"
+            onClick={handleOpenInDefaultApp}
+          >
+            用系统默认方式打开
+          </button>
         </div>
       )}
     </div>
@@ -390,7 +467,10 @@ function getWarmFill(d: any, level: number): string {
     if (name.startsWith('program files')) return ACCENT_PROGRAMS;
   }
   // files keep their type color for legibility if shown
-  if (d.isFile && d.fileType) return GROUP_COLORS[d.fileType] || BG_BLUES[2];
+  if (d.isFile && d.fileType) {
+    const key = d.fileType as FileTypeGroup;
+    return GROUP_COLORS[key] || BG_BLUES[2];
+  }
   // default bluish-gray fill, pick by hash for slight variation
   const idx = Math.abs(hashCode(d.id || d.name || 'x')) % BG_BLUES.length;
   return BG_BLUES[idx];

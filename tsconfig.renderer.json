@@ -6,6 +6,5 @@
     "lib": ["ES2021", "DOM"],
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/**/*", "src/common/**/*.ts"]
+  "include": ["src/renderer/**/*", "src/common/**/*.ts", "src/preload/global.d.ts"]
 }
-

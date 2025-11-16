@@ -350,3 +350,38 @@ svg { display: block; }
   50% { transform: translateX(20%) scaleX(1); }
   100% { transform: translateX(100%) scaleX(0.6); }
 }
+
+/* Context menu for nodes */
+.node-context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  max-width: 280px;
+  background: #111827;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+  padding: 4px 0;
+}
+.node-context-menu-title {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #9CA3AF;
+  border-bottom: 1px solid rgba(55,65,81,0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node-context-menu-item {
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  color: #E5E7EB;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.node-context-menu-item:hover {
+  background: rgba(55,65,81,0.9);
+}

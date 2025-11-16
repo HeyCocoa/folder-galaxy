@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import path from 'path';
+import fs from 'fs/promises';
 import { scanDirectory } from './scan/scanDirectory';
 import type { ScanOptions, ScanResult, IpcResult, ScanProgress } from '../shared/types';
 
@@ -73,8 +74,22 @@ ipcMain.handle('cancel-scan', async (_e: any, scanId: string) => {
   return { ok: true };
 });
 
-ipcMain.handle('open-folder', async (_e: any, folderPath: string) => {
-  const res = await shell.openPath(folderPath);
+ipcMain.handle('open-folder', async (_e: any, targetPath: string) => {
+  try {
+    let p = targetPath;
+    const st = await fs.stat(targetPath).catch(() => null);
+    if (st && st.isFile()) {
+      p = path.dirname(targetPath);
+    }
+    const res = await shell.openPath(p);
+    return { ok: res === '', error: res || undefined };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('open-path', async (_e: any, targetPath: string) => {
+  const res = await shell.openPath(targetPath);
   return { ok: res === '', error: res || undefined };
 });
 

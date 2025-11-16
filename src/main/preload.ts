@@ -13,6 +13,8 @@ const api = {
     ipcRenderer.invoke('cancel-scan', scanId),
   openFolder: (folderPath: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('open-folder', folderPath),
+  openPath: (targetPath: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('open-path', targetPath),
   chooseDirectory: (): Promise<{ canceled: boolean; filePaths: string[] }> =>
     ipcRenderer.invoke('choose-directory'),
 };
