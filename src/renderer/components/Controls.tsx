@@ -33,6 +33,11 @@ const Controls: React.FC<Props> = ({
   progressText,
 }) => {
   const [open, setOpen] = React.useState(false);
+  const [depthOpen, setDepthOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) setDepthOpen(false);
+  }, [open]);
   return (
     <div className="toolbar">
       <button
@@ -63,28 +68,57 @@ const Controls: React.FC<Props> = ({
           </div>
           <div className="toolbar-panel-section">
             <span className="toolbar-label">深度</span>
-            <select value={depth} onChange={(e) => setDepth(Number(e.target.value))}>
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-            </select>
+            <div className="depth-select-wrapper">
+              <button
+                type="button"
+                className="depth-select"
+                onClick={() => setDepthOpen((v) => !v)}
+              >
+                <span>{depth}</span>
+                <span className="depth-select-arrow">▾</span>
+              </button>
+              {depthOpen && (
+                <div className="depth-select-menu">
+                  {[1, 2].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      className={`depth-select-option${
+                        depth === v ? ' depth-select-option--active' : ''
+                      }`}
+                      onClick={() => {
+                        setDepth(v);
+                        setDepthOpen(false);
+                      }}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-            <label className="toggle-chip">
-              <input
-                type="checkbox"
-                checked={includeHidden}
-                onChange={(e) => setIncludeHidden(e.target.checked)}
-              />
-              <span>包含隐藏</span>
-            </label>
+            <button
+              type="button"
+              className={`toggle-chip${includeHidden ? ' toggle-chip--active' : ''}`}
+              onClick={() => {
+                setDepthOpen(false);
+                setIncludeHidden(!includeHidden);
+              }}
+            >
+              包含隐藏
+            </button>
 
-            <label className="toggle-chip">
-              <input
-                type="checkbox"
-                checked={includeSystem}
-                onChange={(e) => setIncludeSystem(e.target.checked)}
-              />
-              <span>包含系统目录</span>
-            </label>
+            <button
+              type="button"
+              className={`toggle-chip${includeSystem ? ' toggle-chip--active' : ''}`}
+              onClick={() => {
+                setDepthOpen(false);
+                setIncludeSystem(!includeSystem);
+              }}
+            >
+              包含系统目录
+            </button>
           </div>
           <div className="toolbar-panel-section">
             <button

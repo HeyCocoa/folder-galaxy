@@ -1,4 +1,4 @@
-# Folder Constellation (文件夹星座图)
+# folder galaxy (文件夹星座图)
 
 Windows 桌面应用：选择根目录，扫描 1–2 级子目录并用 D3 气泡图/星团可视化展示。Electron 主进程扫描文件系统，前端使用 React + D3 渲染。
 

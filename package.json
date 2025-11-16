@@ -2,7 +2,7 @@
   "name": "folder-constellation",
   "version": "0.1.0",
   "private": true,
-  "description": "Folder Constellation: visualize folder sizes as constellations (Electron + React + D3)",
+  "description": "folder galaxy: visualize folder sizes as constellations (Electron + React + D3)",
   "main": "dist/main/main.js",
   "author": "",
   "license": "MIT",
@@ -38,7 +38,7 @@
   },
   "build": {
     "appId": "com.example.folderconstellation",
-    "productName": "Folder Constellation",
+    "productName": "folder galaxy",
     "files": [
       "dist/**/*",
       "package.json"
@@ -47,7 +47,8 @@
       "buildResources": "build"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     }
   }
 }

@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-A concise contributor guide for Folder Constellation (Electron + Node/TS + React + D3).
+A concise contributor guide for folder galaxy (Electron + Node/TS + React + D3).
 
 ## Project Structure & Module Organization
 - `src/main/` – Electron main process, IPC, preload, scanner
