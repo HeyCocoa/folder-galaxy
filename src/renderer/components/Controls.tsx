@@ -10,13 +10,11 @@ interface Props {
   setIncludeHidden: (b: boolean) => void;
   includeSystem: boolean;
   setIncludeSystem: (b: boolean) => void;
-  includeFiles: boolean;
-  setIncludeFiles: (b: boolean) => void;
   onScan: () => void;
   onCancel: () => void;
   scanning: boolean;
   lastError?: string | null;
-  progress?: { text: string } | null;
+  progressText?: string | null;
 }
 
 const Controls: React.FC<Props> = ({
@@ -28,49 +26,94 @@ const Controls: React.FC<Props> = ({
   setIncludeHidden,
   includeSystem,
   setIncludeSystem,
-  includeFiles,
-  setIncludeFiles,
   onScan,
   onCancel,
   scanning,
   lastError,
-  progress,
+  progressText,
 }) => {
+  const [open, setOpen] = React.useState(false);
   return (
     <div className="toolbar">
-      <button onClick={async () => {
-        const res = await window.api.chooseDirectory();
-        if (!res.canceled && res.filePaths[0]) setRootPath(res.filePaths[0]);
-      }}>选择目录</button>
-      <input type="text" placeholder="根目录路径" value={rootPath} onChange={(e) => setRootPath(e.target.value)} />
+      <button
+        className="toolbar-toggle-button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="图谱设置"
+      >
+        ⚙
+      </button>
+      {open && (
+        <div className="toolbar-panel">
+          <div className="toolbar-panel-section">
+            <button
+              className="primary-button"
+              onClick={async () => {
+                const res = await window.api.chooseDirectory();
+                if (!res.canceled && res.filePaths[0]) setRootPath(res.filePaths[0]);
+              }}
+            >
+              选择目录
+            </button>
+            <input
+              type="text"
+              placeholder="根目录路径"
+              value={rootPath}
+              onChange={(e) => setRootPath(e.target.value)}
+            />
+          </div>
+          <div className="toolbar-panel-section">
+            <span className="toolbar-label">深度</span>
+            <select value={depth} onChange={(e) => setDepth(Number(e.target.value))}>
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+            </select>
 
-      <label>深度</label>
-      <select value={depth} onChange={(e) => setDepth(Number(e.target.value))}>
-        <option value={1}>1</option>
-        <option value={2}>2</option>
-      </select>
+            <label className="toggle-chip">
+              <input
+                type="checkbox"
+                checked={includeHidden}
+                onChange={(e) => setIncludeHidden(e.target.checked)}
+              />
+              <span>包含隐藏</span>
+            </label>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input type="checkbox" checked={includeHidden} onChange={(e) => setIncludeHidden(e.target.checked)} />
-        包含隐藏
-      </label>
-
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input type="checkbox" checked={includeSystem} onChange={(e) => setIncludeSystem(e.target.checked)} />
-        包含系统目录
-      </label>
-
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input type="checkbox" checked={includeFiles} onChange={(e) => setIncludeFiles(e.target.checked)} />
-        显示文件
-      </label>
-
-      <button disabled={!rootPath || scanning} onClick={onScan}>{scanning ? '扫描中…' : '开始扫描'}</button>
-      {scanning && <button onClick={onCancel} style={{ marginLeft: 8 }}>取消</button>}
-
-      <div className="meta">
-        {lastError ? <span style={{ color: 'var(--danger)' }}>{lastError}</span> : progress ? <span>{progress.text}</span> : <span>就绪</span>}
-      </div>
+            <label className="toggle-chip">
+              <input
+                type="checkbox"
+                checked={includeSystem}
+                onChange={(e) => setIncludeSystem(e.target.checked)}
+              />
+              <span>包含系统目录</span>
+            </label>
+          </div>
+          <div className="toolbar-panel-section">
+            <button
+              className="primary-button"
+              disabled={!rootPath || scanning}
+              onClick={() => {
+                onScan();
+                setOpen(false);
+              }}
+            >
+              {scanning ? '扫描中…' : '开始扫描'}
+            </button>
+            {scanning && (
+              <button className="ghost-button" onClick={onCancel}>
+                取消
+              </button>
+            )}
+            <div className="toolbar-panel-meta">
+              {lastError ? (
+                <span style={{ color: 'var(--danger)' }}>{lastError}</span>
+              ) : progressText ? (
+                <span>{progressText}</span>
+              ) : (
+                <span>就绪</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -266,7 +266,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
         showTooltip(d);
         const circle = d3.select(this).select('circle.fill-disk');
         const baseFill = circle.attr('data-fill');
-        const c = d3.color(baseFill || '#3A4A62');
+        const c = d3.color(baseFill || '#4D5664');
         const lighter = d3.hsl(c as any).brighter(0.8).formatHex();
         d3.select(this).transition().duration(120).attr('transform', `translate(${d.x},${d.y}) scale(1.04)`);
         circle.transition().duration(120).attr('fill', lighter);
@@ -277,7 +277,7 @@ const ConstellationGraph: React.FC<Props> = ({ data, selectedId, setSelectedId, 
         const circle = d3.select(this).select('circle.fill-disk');
         const baseFill = circle.attr('data-fill');
         d3.select(this).transition().duration(120).attr('transform', `translate(${d.x},${d.y}) scale(1)`);
-        circle.transition().duration(120).attr('fill', baseFill || '#3A4A62');
+        circle.transition().duration(120).attr('fill', baseFill || '#4D5664');
       })
       .on('click', (_, d) => {
         const dd: any = d.data as any;
@@ -382,7 +382,7 @@ function renderTooltipHtml(d: any, rootTotal: number) {
     return `
       <div style="font-weight:700;letter-spacing:.2px;color:#EAEFF5">${d.name}</div>
       <div>大小：${formatBytes(d.totalSize)}（${pct}）</div>
-      <div class=\"muted\" style=\"margin-top:6px;color:#A9B3C5\">路径：</div>
+      <div class=\"muted\" style=\"margin-top:6px;color:#4D5664\">路径：</div>
       <div style=\"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px;color:#EAEFF5\">${d.path}</div>
     `;
   }
@@ -390,14 +390,14 @@ function renderTooltipHtml(d: any, rootTotal: number) {
     <div style="font-weight:700;letter-spacing:.2px;color:#EAEFF5">${d.name}</div>
     <div>大小：${formatBytes(d.totalSize)}（${pct}）</div>
     <div>文件：${formatNumber(d.fileCount)} | 子文件夹：${d.subfolderCount}</div>
-    <div class=\"muted\" style=\"margin-top:6px;color:#A9B3C5\">路径：</div>
+    <div class=\"muted\" style=\"margin-top:6px;color:#4D5664\">路径：</div>
     <div style=\"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px;color:#EAEFF5\">${d.path}</div>
   `;
 }
 
 // Palette helpers
-const BG_BLUES = ['#283549', '#32435A', '#3A4A62'];
-const OTHERS_FILL = '#253245';
+const BG_BLUES = ['#4D5664', '#4D5664', '#4D5664'];
+const OTHERS_FILL = '#4D5664';
 const ACCENT_USERS = '#F78A4A';
 const ACCENT_WINDOWS = '#EFC657';
 const ACCENT_PROGRAMS = '#20909C';
